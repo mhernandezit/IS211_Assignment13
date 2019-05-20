@@ -1,18 +1,20 @@
 {% extends 'base.html' %}
 
 {% block header %}
-  <h1>{% block title %}Add a Quiz - Student Quiz CMS{% endblock %}</h1>
+  <h1>{% block title %}Add a Quiz{% endblock %}</h1>
 {% endblock %}
 
 {% block content %}
-    <div id="addquiz">
+    <div class="container">
         <h3>Add a Quiz To The Class</h3>
-        <form action="/quiz/add" method="post">
-            <input type="text" name="subject" placeholder="Subject" required="required"></input>
-            <input type="number" name="num_of_questions" placeholder="# of Questions" required="required"></input>
-            <input type="date" name="date" required pattern="[0-9]{2}-[0-9]{2}-[0-9]{4}"></input>
-            <input type="submit" value="Add Quiz"></input>
+        <form class="form form-horizontal" action="/quiz/add" method="post">
+            <input type="text" name="subject" placeholder="Subject" required="required">
+            <input type="number" name="questions" placeholder="# of Questions" required="required">
+            <input type="date" name="date" required pattern="[0-9]{2}-[0-9]{2}-[0-9]{4}">
+            <input class="btn btn-success" type="submit" value="Add Quiz">
         </form>
-        <span><a href="/dashboard" class="button">Return to Dashboard</a></span>
+    
+        <a href="/dashboard" button type="button" class="btn btn-primary">Back to Dashboard</a></button>
+
     </div>
 {% endblock %}

@@ -1,86 +1,95 @@
-""" Flask app using a database backend """
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""Flask application using sqlite3 database"""
 
-import uuid
+
+import sqlite3 as lite
 import re
-from flask import Flask, session, redirect, render_template, request, flash, url_for
+import os
+from flask import (Flask, render_template, request, redirect,
+                   g, flash, session)
 from werkzeug.security import check_password_hash, generate_password_hash
-from database import db_session, init_db
-from models import Teacher, Student, Quiz, Grades, RegistrationForm
 from flask_bootstrap import Bootstrap
-from sqlalchemy import create_engine
-from sqlalchemy.orm import scoped_session, sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-
-engine = create_engine('sqlite:///schools.db', convert_unicode=True, echo=True)
-db_session = scoped_session(sessionmaker(autocommit=False,
-                                         autoflush=False,
-                                         bind=engine))
-Base = declarative_base()
-Base.query = db_session.query_property()
-
+from flask_moment import Moment
 
 app = Flask(__name__)
 bootstrap = Bootstrap(app)
-app.secret_key = uuid.uuid4().hex
+app.secret_key = os.urandom(24).encode('hex')
+moment = Moment(app)
 student_roster = []
 quiz_roster = []
-init_db()
 
 
-@app.teardown_appcontext
-def shutdown_session(exception=None):
-    db_session.remove()
+def get_db():
+    """ Database initialization, getter """
+    if 'db' not in g:
+        g.db = lite.connect('hw13.db')
+        g.db.row_factory = lite.Row
+
+    return g.db
 
 
-@app.route('/',  methods=['GET'])
-def home_pg():
+@app.route('/', methods=['GET'])
+def index():
+    """ Default route - returns the dashboard if a user is logged in
+        Otherwise, returns a login page """
     if 'logged_in' in session:
         return redirect('/dashboard')
     else:
         return render_template('auth/login.html')
 
 
-@app.route('/dashboard',  methods=['GET'])
+@app.route('/dashboard', methods=['GET'])
 def dashboard():
+    """ Dashboard - normal page returns the school homepage
+        If a user has a shortcut to this page, but is not logged in
+        this page will redirect to the login """
     if 'logged_in' in session:
-        return render_template('cms/dashboard.html',
+        return render_template('school/dashboard.html',
                                student_roster=student_roster,
                                quiz_roster=quiz_roster)
     else:
         return redirect('/')
 
 
-@app.route('/login',  methods=['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    error = None
+    """ Login page, pulls username, password from a form
+        checks if the username is in the DB, and if the
+        password hash matches the password in the DB """
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-
-        user = Teacher.query.filter(Teacher.username == username).first()
+        error = None
+        database = get_db()
+        user = database.execute(
+            """SELECT * FROM teachers WHERE username = ?""",
+            (username,)).fetchone()
 
         if user is None:
             error = 'Incorrect username.'
-        elif not check_password_hash(Teacher.password, password):
+            flash("Testing flash")
+        elif not check_password_hash(user['password'], password):
             error = 'Incorrect password.'
+            flash("Incorrect password")
 
         if error is None:
             session.clear()
             session['logged_in'] = True
-            session['user_id'] = user.teacher_id
+            session['user_id'] = user['teacherid']
 
-            for row in Student.query.all():
+            for row in database.execute('SELECT * FROM students'):
                 if row not in student_roster:
                     student_roster.append((row))
 
-            for row in Quiz.query.all():
+            for row in database.execute('SELECT * FROM quizzes'):
                 if row not in quiz_roster:
                     quiz_roster.append((row))
 
             return redirect('/dashboard')
 
-        flash(error)
-        return render_template('auth/login.html', error=error)
+        flash("flash")
+        return render_template('auth/login.html')
 
     if request.method == 'GET':
         return redirect('/dashboard')
@@ -88,24 +97,44 @@ def login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    form = RegistrationForm(request.form)
-    if request.method == 'POST' and form.validate():
-        user = Teacher(form.username.data,
-                       form.password.data)
-        db_session.add(user)
-        flash('Thanks for registering')
-        return redirect(url_for('login'))
-    return render_template('auth/register.html', form=form)
+    """ Page to register a new admin user """
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        error = None
+        database = get_db()
+
+        if not username:
+            error = 'Username is required.'
+        elif not password:
+            error = 'Password is required.'
+        elif database.execute(
+                """SELECT teacherid FROM teachers WHERE username = ?""",
+                (username,)).fetchone() is not None:
+            error = 'User {} is already registered.'.format(username)
+
+        if error is None:
+            database.execute(
+                """INSERT INTO teachers (username, password) VALUES (?, ?)""",
+                (username, generate_password_hash(password)))
+            database.commit()
+
+        return redirect('/dashboard')
+
+    elif request.method == 'GET':
+        return render_template('auth/register.html')
 
 
-@app.route('/student/add',  methods=['GET', 'POST'])
-def addstudent():
+@app.route('/student/add', methods=['GET', 'POST'])
+def add_student():
+    """ Function to add a student to the database """
     if 'logged_in' in session:
         if request.method == 'GET':
-            return render_template('cms/add_student.html')
+            return render_template('school/add_student.html')
         elif request.method == 'POST':
             firstname = request.form['firstname']
             lastname = request.form['lastname']
+            database = get_db()
             error = None
 
             if not firstname:
@@ -121,13 +150,15 @@ def addstudent():
                         "Please do not include special characters."
 
             if error is None:
-                if not Student.query.filter(Student.firstname == firstname,
-                                            Student.lastname == lastname):
-                    new_student = Student(firstname, lastname)
-                    db_session.add(new_student)
-                    db_session.commit()
+                database.execute(
+                    """INSERT INTO students (firstname, lastname)
+                    VALUES (?, ?)""", (firstname, lastname))
+                database.commit()
 
-                for row in Student.query.all():
+                for row in database.execute("""SELECT * FROM students
+                                            WHERE firstname=? AND
+                                            lastname=?;""",
+                                            (firstname, lastname)):
                     student_roster.append((row))
                 return redirect('/dashboard')
 
@@ -137,34 +168,42 @@ def addstudent():
         return redirect('/')
 
 
-@app.route('/quiz/add',  methods=['GET', 'POST'])
-def addquiz():
+@app.route('/quiz/add', methods=['GET', 'POST'])
+def add_quiz():
+    """ Function to add a quiz to the database """
+    error = None
     if 'logged_in' in session:
         if request.method == 'GET':
             return render_template('school/add_quiz.html')
         elif request.method == 'POST':
             subject = request.form['subject']
-            num_of_questions = request.form['num_of_questions']
-            quiz_date = request.form['date']
-            error = None
+            questions = request.form['questions']
+            date = request.form['date']
+            database = get_db()
 
             if not subject:
                 error = 'Subject is required.'
-            elif not num_of_questions:
+            elif not questions:
                 error = 'Number of questions is required.'
-            elif not quiz_date:
+            elif not date:
                 error = 'Quiz date is required.'
 
             if re.search(r'[!@#$%^&*(),.?":{}|<>]', subject):
-                error = "Invalid characters used in Subject. " \
-                        "Please do not include special characters."
+                error = "Invalid characters used in Subject. "
 
             if error is None:
-                new_quiz = Quiz(subject, num_of_questions, quiz_date)
-                db_session.add(new_quiz)
-                db_session.commit()
+                database.execute(
+                    """ INSERT INTO
+                        quizzes (subject, questions, date)
+                        VALUES
+                       ( ? , ? , ? )""", (subject, questions, date))
+                database.commit()
 
-                quiz_roster.append([subject, num_of_questions, quiz_date])
+                for row in database.execute(
+                    """SELECT * FROM quizzes
+                        WHERE subject =? AND questions =? AND date =? ;""",
+                        (subject, questions, date)):
+                    quiz_roster.append((row))
                 return redirect('/dashboard')
 
         flash(error)
@@ -173,60 +212,83 @@ def addquiz():
         return redirect('/')
 
 
-@app.route('/student/<path:student_id>', methods=['GET'])
-def viewstudent(student_id):
+@app.route('/student/<path:studentid>', methods=['GET'])
+def view_student(studentid):
+    """ Function to add a student to the database """
     if 'logged_in' in session:
         student_data = []
         student_name = []
+        sid = studentid
+        database = get_db()
 
-        for result in Student.query.filter(Student.id == student_id):
-            if result not in student_name:
-                student_name.append((result))
+        for row in database.execute('SELECT firstname, lastname '
+                                    'FROM students '
+                                    'WHERE studentid=?;', sid):
+            if row not in student_name:
+                student_name.append((row))
 
-        for result in Grades.query.all():
-            if result not in student_data:
-                student_data.append((result))
+        for row in database.execute(
+            """SELECT quizzes.quizid,
+                quizzes.subject,
+                quizzes.questions,
+                quizzes.date,
+                grades.score
+                FROM   quizzes
+                JOIN   grades
+                ON     grades.quizid == quizzes.quizid
+                WHERE   studentid=?;""", sid):
+            if row not in student_data:
+                student_data.append((row))
 
         return render_template('school/student.html',
-                               student_id=student_id,
+                               studentid=studentid,
                                student_data=student_data,
                                student_name=student_name)
 
 
 @app.route('/results/add', methods=['GET', 'POST'])
 def add_score():
+    """ Function to add a score to a student/quiz """
     if 'logged_in' in session and request.method == 'GET':
-        student_id = []
-        quiz_id = []
+        student_list = []
+        quiz_list = []
+        database = get_db()
 
-        for row in Student.query.all():
-            if row not in student_id:
-                student_id.append((row))
+        for row in database.execute('SELECT * FROM students;'):
+            if row not in student_list:
+                student_list.append((row))
 
-        for row in Quiz.query.all():
-            if row not in quiz_id:
-                quiz_id.append((row))
+        for row in database.execute('SELECT quizid, subject FROM quizzes;'):
+            if row not in quiz_list:
+                quiz_list.append((row))
 
-        return render_template('school/add_score.html',
-                               student_ids=student_id,
-                               quiz_ids=quiz_id)
+        return render_template('school/results.html',
+                               student_list=student_list,
+                               quiz_list=quiz_list)
 
     elif 'logged_in' in session and request.method == 'POST':
-        student_id = request.form['studentID']
-        quiz_id = request.form['quizID']
+        student = request.form['student_list']
+        quiz = request.form['quiz_list']
         score = request.form['score']
+        database = get_db()
         message = None
 
-        grade_exists = Grades.query.filter(Grades.studentid == student_id,
-                                           Grades.quizid == quiz_id)
+        if score > 0 and score < 100:
+            duplicates = database.execute("""
+            SELECT * FROM grades WHERE studentid=? AND quizid=?;""",
+                                          (student, quiz))
 
-        if grade_exists is None:
-            new_grade = Grades(student_id, quiz_id, score)
-            db_session.add(new_grade)
-            db_session.commit()
-            message = "Quiz added successfully!"
+            if duplicates.fetchone() is None:
+                database.execute(
+                    """INSERT INTO grades(studentid, quizid, score)
+                     VALUES (?, ?, ?);""",
+                                (student, quiz, score))
+                database.commit()
+                message = "Quiz added successfully!"
+            else:
+                message = "Duplicate quiz for this student found."
         else:
-            message = "Duplicate quiz for this student found."
+            message = "Score must be between 0 and 100"
 
         flash(message)
 
@@ -234,6 +296,27 @@ def add_score():
 
     else:
         return redirect('/')
+
+
+@app.errorhandler(404)
+def page_not_found(error):
+    """ Renders a custom 404 error page """
+    print error
+    return render_template('404.html'), 404
+
+
+@app.errorhandler(500)
+def server_error(error):
+    """ Renders a custom 500 error page """
+    print error
+    return render_template('500.html'), 500
+
+
+@app.errorhandler(405)
+def unauthorized_error(error):
+    """ Renders a custom 405 error page """
+    print error
+    return render_template('405.html'), 405
 
 
 if __name__ == '__main__':

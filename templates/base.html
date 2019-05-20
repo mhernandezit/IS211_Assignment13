@@ -13,11 +13,14 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
         </button>
-        <a class="navbar-brand" href="/">ToDo</a>
+        <a class="navbar-brand" href="/">Teacher Quiz Grading System</a>
         </div>
         <div class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
                 <li><a href="/">Index</a></li>
+                <li><a href="/student/add">Add Student</a></li>
+                <li><a href="/quiz/add">Add Quiz</a></li>
+                <li><a href="/results/add">Add Results</a></li>
             </ul>
         </div>
     </div>
@@ -26,6 +29,18 @@
 
 {% block content %}
 <div class="container">
+    {% for message in get_flashed_messages() %}
+    <div class="alert alert-warning">
+        <button type="button" class="close" data-dismiss="alert">&times;</button>
+        {{ message }}
+    </div>
+    {% endfor %}
+
     {% block page_content %}{% endblock %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{{ moment.include_moment() }}
 {% endblock %}

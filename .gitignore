@@ -1,2 +1,4 @@
 venv/
 .vscode/
+models.py
+school.db

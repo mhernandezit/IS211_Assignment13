@@ -1,45 +1,46 @@
 {% extends 'base.html' %}
 
+
 {% block header %}
-  <h1>{% block title %}Dashboard - Student Quiz CMS{% endblock %}</h1>
+  <h1>{% block title %}Teacher Dashboard{% endblock %}</h1>
 {% endblock %}
 
 {% block content %}
-    <div id="dashboard">
-        <div id="classinfo">
+    <div class="container">
+        <div class="row">
             <h3>Student Roster</h3>
-            <table>
-                <th>Student ID</th>
-                <th>First Name</th>
-                <th>Last Name</th>
-                <th>See Student Grades</th>
+            <table class="table">
+                <th scope="col">First Name</th>
+                <th scope="col">Last Name</th>
+                <th scope="col">Student Grades</th>
                 {% for student in student_roster %}
                 <tr>
-                    <td>{{ student.0 }}</td>
                     <td>{{ student.1 }}</td>
                     <td>{{ student.2 }}</td>
-                    <td><a href="/student/{{student['student_id']}}" class="viewstudent">View</a></td>
+                    <td><a href="/student/{{student['studentid']}}" class="viewstudent">View</a></td>
                 </tr>
                 {% endfor %}
             </table>
+        </div>
+        <div class="row">
             <h3>Class Quizzes</h3>
-            <table>
-                <th>Quiz ID</th>
-                <th>Subject</th>
-                <th>Num. of Questions</th>
-                <th>Date</th>
+            <table class="table">
+                <th scope="col">Subject</th>
+                <th scope="col">Num. of Questions</th>
+                <th scope="col">Date</th>
                 {% for quiz in quiz_roster %}
                 <tr>
-                    <td>{{ quiz.0 }}</td>
-                    <td>{{ quiz.1}}</td>
+                    <td>{{ quiz.1 }}</td>
                     <td>{{ quiz.2 }}</td>
                     <td>{{ quiz.3 }}</td>
                 </tr>
                 {% endfor %}
             </table>
         </div>
-        <span><a href="/student/add" class="button">Add a Student</a></span>
-        <span><a href="/quiz/add" class="button">Add a Quiz</a></span>
-        <span><a href="/results/add" class="button">Add a Quiz Result</a></span>
+        <div class="btn-group"role="group" aria-label="Basic example">
+                <a href="/student/add" button type="button" class="btn btn-primary">Add a Student</a></button>
+                <a href="/quiz/add" button type="button" class="btn btn-primary">Add a Quiz</a></button>
+                <a href="/results/add" button type="button" class="btn btn-primary">Add a Quiz Result</a></button>
+        </div>
     </div>
 {% endblock %}
